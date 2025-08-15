@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useDataContext } from '@/context/data-context';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 
 type SortableKeys = 'MERCHANTACCOUNTNUMBER' | 'SALERPHONENUMBER' | 'TICKET' | 'AMOUNT' | 'INSERTDATE';
 const ITEMS_PER_PAGE = 15;
@@ -32,6 +33,8 @@ const ITEMS_PER_PAGE = 15;
 export default function PaystreamTxnList({ paystreamTxns: initialPaystreamTxns }: { paystreamTxns: paystream_txns[] }) {
   const { merchants, allowedCompanies } = useDataContext();
   const [searchTerm, setSearchTerm] = React.useState('');
+  const [searchField, setSearchField] = React.useState('all');
+  const [companyFilter, setCompanyFilter] = React.useState('all');
   const [sortConfig, setSortConfig] = React.useState<{
     key: SortableKeys;
     direction: 'ascending' | 'descending';
@@ -65,13 +68,24 @@ export default function PaystreamTxnList({ paystreamTxns: initialPaystreamTxns }
   const filteredAndSortedTxns = React.useMemo(() => {
     let sortableItems = [...initialPaystreamTxns];
 
+    if (companyFilter !== 'all') {
+        sortableItems = sortableItems.filter(txn => txn.MERCHANTACCOUNTNUMBER === companyFilter);
+    }
+
     if (searchTerm) {
         const lowercasedTerm = searchTerm.toLowerCase();
-        sortableItems = sortableItems.filter((txn) =>
-            Object.values(txn).some(val => String(val).toLowerCase().includes(lowercasedTerm)) ||
-            getMerchantName(txn.MERCHANTACCOUNTNUMBER).toLowerCase().includes(lowercasedTerm) ||
-            getSalerName(txn.SALERPHONENUMBER).toLowerCase().includes(lowercasedTerm)
-      );
+        sortableItems = sortableItems.filter((txn) => {
+             if (searchField === 'all') {
+                return (
+                    getMerchantName(txn.MERCHANTACCOUNTNUMBER).toLowerCase().includes(lowercasedTerm) ||
+                    getSalerName(txn.SALERPHONENUMBER).toLowerCase().includes(lowercasedTerm) ||
+                    (txn.TICKET && txn.TICKET.toLowerCase().includes(lowercasedTerm)) ||
+                    (txn.PAYERACCOUNT && txn.PAYERACCOUNT.toLowerCase().includes(lowercasedTerm))
+                );
+            }
+            const fieldValue = txn[searchField as keyof paystream_txns] as string;
+            return fieldValue?.toLowerCase().includes(lowercasedTerm)
+        });
     }
 
     if (sortConfig !== null) {
@@ -90,7 +104,7 @@ export default function PaystreamTxnList({ paystreamTxns: initialPaystreamTxns }
     }
 
     return sortableItems;
-  }, [initialPaystreamTxns, searchTerm, sortConfig, allowedCompanies, merchants]);
+  }, [initialPaystreamTxns, searchTerm, searchField, companyFilter, sortConfig, allowedCompanies, merchants]);
 
   const paginatedTxns = React.useMemo(() => {
     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
@@ -114,13 +128,37 @@ export default function PaystreamTxnList({ paystreamTxns: initialPaystreamTxns }
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="flex items-center justify-end gap-2 py-4">
-          <Input
-            placeholder="Search transactions..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="max-w-sm"
-          />
+        <div className="flex items-center justify-between gap-2 py-4">
+           <Select value={companyFilter} onValueChange={setCompanyFilter}>
+                <SelectTrigger className="h-9 w-[180px]">
+                    <SelectValue placeholder="Filter by Company" />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="all">All Companies</SelectItem>
+                    {allowedCompanies.map(company => (
+                        <SelectItem key={company.Oid} value={company.ACCOUNTNUMBER}>{company.FIELDNAME}</SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
+           <div className="flex items-center gap-2">
+            <Select value={searchField} onValueChange={setSearchField}>
+                <SelectTrigger className="h-9 w-[150px]">
+                    <SelectValue placeholder="Search by" />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="all">All Fields</SelectItem>
+                    <SelectItem value="TICKET">Ticket</SelectItem>
+                    <SelectItem value="PAYERACCOUNT">Payer Account</SelectItem>
+                    <SelectItem value="SALERPHONENUMBER">Saler Phone</SelectItem>
+                </SelectContent>
+            </Select>
+            <Input
+              placeholder="Search..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="h-9 max-w-sm"
+            />
+          </div>
         </div>
         <div className="rounded-md border">
           <Table>
